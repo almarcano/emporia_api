@@ -14,7 +14,8 @@ from pyemvue.device import VueDevice, VueDeviceChannel, VuewDeviceChannelUsage
 
 vue = PyEmVue()
 now = datetime.utcnow()
-startUse = datetime(2020, 10, 1, 0, 0, 0)
+startUse = datetime(2020, 11, 1, 5, 0, 0)
+endUse = datetime(2020, 12, 1, 6, 0, 0)
 
 def main():
     errorMsg = 'Please pass a file containing the "email" and "password" as json.'
@@ -69,9 +70,10 @@ def main():
     devices = vue.get_devices()                             # Get devices details
     for i, device in enumerate(devices):
         device = vue.populate_device_properties(device)
-        totalUsage = vue.get_usage_over_time(devices[i].channels[0], startUse, now, scale=Scale.HOUR.value, unit=Unit.WATTS)
-        create_csv(device.device_name, totalUsage)          # Crea Archivos csv
-        create_plot(device.device_name)                     # Crea Gráficos en html
+        totalUsage = vue.get_usage_over_time(devices[i].channels[0], startUse, endUse, scale=Scale.HOUR.value, unit=Unit.WATTS)
+        # Crear Archivos CSV
+        #create_csv(device.device_name, totalUsage)          
+        create_plot(device.device_name, startUse, endUse)   # Crea Gráficos en html
         print(device.device_name)                           # Nombre del equipo
         print("GID: " + str(device.device_gid))             # GID del equipo
         print("Modelo: " + device.model)                    # Modelo del equipo
@@ -87,23 +89,57 @@ def main():
 def create_csv(name, total):
     filename = name + ".csv"
     fieldNames = ["DateTime", "Value"]
-    startUse = datetime(2020, 9, 30, 18, 0, 0)
+    startTime = startUse + timedelta(hours=-5)
     with open(filename, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldNames)
         writer.writeheader()
         for i, line in enumerate(total):
-            date_and_time = startUse + timedelta(hours=+i)
+            date_and_time = startTime + timedelta(hours=+i)
             if line is None:
                 kwh = 0.0   
             else: 
                 kwh = round(float(line)/1000, 2)
             writer.writerow({"DateTime":date_and_time, "Value":kwh})
+            # Procedimiento adicional para corregir hora (2020,11,1,1,0,0) REPETIDA
+            if date_and_time == datetime(2020, 11, 1, 1, 0, 0):
+                startTime = startUse + timedelta(hours=-6)
 
-def create_plot(name):
+def create_plot(name, start, end):
     csv_file = name + ".csv"
     df = pd.read_csv(csv_file)
-    data = [go.Scatter( x = df['DateTime'], y = df['Value'])]
-    fig = go.Figure(data)
+    data = [go.Scatter( 
+        x = df['DateTime'], 
+        y = df['Value'], 
+        mode='lines+markers',
+        fill='tozeroy', 
+        line=dict(color='green', width=2),
+        text=df['Value'],
+        textposition="top right",
+        marker=dict(color="rgba(48,217,189,1)")
+        )
+    ]
+    layout = go.Layout(
+        plot_bgcolor="lightgrey",
+        title=f"Dispositivo: {name}  / entre el {start.date()} y el {end.date()}",
+        showlegend=True,
+        xaxis=dict(
+            title='Tiempo',
+            titlefont=dict(
+                family='Courier New, monospace',
+                size=18,
+                color='#7f7f7f'
+            )
+        ),
+        yaxis=dict(
+            title='Consumo Kwh',
+            titlefont=dict(
+                family='Courier New, monospace',
+                size=18,
+                color='#7f7f7f'
+            )
+        )
+    )
+    fig = go.Figure(data, layout=layout)
     plotly.offline.plot(fig, filename = name + ".html")    
 
 if __name__ == '__main__':
